@@ -130,43 +130,64 @@ jobs:
           
           # Get absolute paths
           WORKSPACE_DIR=$(pwd)
-          
           cd "$SDK_DIR"
-          
           
           ./scripts/feeds update -a
           ./scripts/feeds install xtables-addons
           
-          #prepare wgobfs
-          # if [ -d "package/xt_wgobfs" ]; then
-          #   rm -rf package/xt_wgobfs
-          # fi
-          
-          # git clone https://github.com/infinet/xt_wgobfs.git ./package/xt_wgobfs
-
+          # Check if xt_wgobfs needs update and if packages already exist
           if [ -d package/xt_wgobfs/.git ]; then
-            git -C package/xt_wgobfs fetch --all && git -C package/xt_wgobfs reset --hard origin/HEAD
+            # Get current commit hash before update
+            OLD_HASH=$(git -C package/xt_wgobfs rev-parse HEAD)
+            git -C package/xt_wgobfs fetch --all
+            git -C package/xt_wgobfs reset --hard origin/HEAD
+            NEW_HASH=$(git -C package/xt_wgobfs rev-parse HEAD)
+            
+            echo "Old commit: $OLD_HASH"
+            echo "New commit: $NEW_HASH"
+            
+            # Check if repository was updated
+            if [ "$OLD_HASH" != "$NEW_HASH" ]; then
+              echo "xt_wgobfs repository was updated, packages need rebuild"
+              echo "REBUILD_NEEDED=true" >> $GITHUB_ENV
+            else
+              echo "xt_wgobfs repository is up to date"
+              echo "REBUILD_NEEDED=false" >> $GITHUB_ENV
+            fi
           else
+            echo "xt_wgobfs repository not found, cloning..."
             rm -rf package/xt_wgobfs
             git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
+            echo "REBUILD_NEEDED=true" >> $GITHUB_ENV
           fi
-          mkdir -p ./package/feeds/packages/xtables-wgobfs
-          mv ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs
           
-          make defconfig
-
+          # Check if packages already exist
+          if find bin/packages -name "*wgobfs*.ipk" 2>/dev/null | grep -q . || find bin/targets -name "*wgobfs*.ipk" 2>/dev/null | grep -q .; then
+            echo "Pre-built packages found"
+            echo "PACKAGES_EXIST=true" >> $GITHUB_ENV
+          else
+            echo "No pre-built packages found"
+            echo "PACKAGES_EXIST=false" >> $GITHUB_ENV
+          fi
+          
+          # Only run defconfig if rebuild is needed or packages don't exist
+          if [ "$REBUILD_NEEDED" = "true" ] || [ "$PACKAGES_EXIST" = "false" ]; then
+            mkdir -p ./package/feeds/packages/xtables-wgobfs
+            mv ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
+            make defconfig
+          else
+            echo "Skipping defconfig - packages exist and no updates needed"
+          fi
 
       - name: Build xt_wgobfs packages
+        if: env.REBUILD_NEEDED == 'true' || env.PACKAGES_EXIST == 'false'
         run: |
-          # Find SDK directory
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           cd "$SDK_DIR"
 
           echo "Building xt_wgobfs packages..."
           make package/xtables-wgobfs/compile V=s
           
-          #find . -name *wg*.ipk   # find . -name "*wg*.ipk" -exec cp {} /tmp \;
-
           echo "Build completed. Checking for built packages..."
           find bin/ -name "*.ipk" | grep -E "(wgobfs)" | head -10
 
@@ -179,8 +200,8 @@ jobs:
           postfix="v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch}}_${{ matrix.build_env.target}}_${{ matrix.build_env.subtarget}}"
           
           # Copy built packages
-          find "$SDK_DIR/bin/packages" -name "iptables-mod-wgobfs_*.ipk" -exec cp {} wgobfsrelease/iptables-mod-wgobfs_${postfix}.ipk \; || echo "iptables-mod-wgobfs package not found"
-          find "$SDK_DIR/bin/targets" -name "kmod-ipt-wgobfs_*.ipk" -exec cp {} wgobfsrelease/kmod-ipt-wgobfs_${postfix}.ipk \; || echo "kmod-ipt-wgobfs package not found"
+          find "$SDK_DIR/bin/packages" -name "iptables-mod-wgobfs_*.ipk" -exec cp {} "wgobfsrelease/iptables-mod-wgobfs_${postfix}.ipk" \; || echo "iptables-mod-wgobfs package not found"
+          find "$SDK_DIR/bin/targets" -name "kmod-ipt-wgobfs_*.ipk" -exec cp {} "wgobfsrelease/kmod-ipt-wgobfs_${postfix}.ipk" \; || echo "kmod-ipt-wgobfs package not found"
           
           echo "Built packages:"
           ls -la wgobfsrelease/
