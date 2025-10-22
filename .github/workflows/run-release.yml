@@ -1,9 +1,9 @@
 name: Sync OpenWRT Releases
 
 on:
-  # schedule:
-   # - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
-  # workflow_dispatch: # Возможность вручную запустить Action
+  schedule:
+   - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
+  workflow_dispatch: # Возможность вручную запустить Action
 
 jobs:
   sync-releases:
