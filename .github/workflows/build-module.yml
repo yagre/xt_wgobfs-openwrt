@@ -138,9 +138,20 @@ jobs:
           ./scripts/feeds install xtables-addons
           
           #prepare wgobfs
-          git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
+          # if [ -d "package/xt_wgobfs" ]; then
+          #   rm -rf package/xt_wgobfs
+          # fi
+          
+          # git clone https://github.com/infinet/xt_wgobfs.git ./package/xt_wgobfs
+
+          if [ -d package/xt_wgobfs/.git ]; then
+            git -C package/xt_wgobfs fetch --all && git -C package/xt_wgobfs reset --hard origin/HEAD
+          else
+            rm -rf package/xt_wgobfs
+            git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
+          fi
           mkdir -p ./package/feeds/packages/xtables-wgobfs
-          mv ./package/xt_wgobfs/openwrt/package/Makefile package/feeds/packages/xtables-wgobfs
+          mv ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs
           
           make defconfig
 
