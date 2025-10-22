@@ -1,21 +1,21 @@
 {
-  "name": "awg-openwrt",
+  "name": "xt_wgobfs-openwrt",
   "version": "1.0.0",
-  "description": "Amnezia Wireguard packages for OpenWRT",
+  "description": "xt_wgobfs packages for OpenWRT",
   "main": "index.js",
   "scripts": {
     "get-build-envs": "node index.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Slava-Shchipunov/awg-openwrt.git"
+    "url": "git+https://github.com/yagre/xt_wgobfs-openwrt.git"
   },
-  "author": "Slava Shchipunov",
+  "author": "yagre",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Slava-Shchipunov/awg-openwrt/issues"
+    "url": "https://github.com/yagre/xt_wgobfs-openwrt/issues"
   },
-  "homepage": "https://github.com/Slava-Shchipunov/awg-openwrt#readme",
+  "homepage": "https://github.com/yagre/xt_wgobfs-openwrt#readme",
   "dependencies": {
     "@actions/core": "^1.10.1",
     "axios": "^1.3.1",
