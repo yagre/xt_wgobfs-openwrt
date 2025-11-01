@@ -163,10 +163,14 @@ jobs:
               elif [ $attempt -eq 2 ]; then
                 echo "Replacing OpenWRT git URLs with GitHub mirrors..."
                 # Backup original file
+                cat feeds.conf.default
                 cp feeds.conf.default feeds.conf.default.backup
                 # Replace both URLs
                 sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git' feeds.conf.default
                 echo "Updated feeds.conf.default:"
                 cat feeds.conf.default
               fi
@@ -217,7 +221,7 @@ jobs:
           cd "$SDK_DIR"
 
           echo "Building xt_wgobfs packages..."
-          make package/xtables-wgobfs/compile V=s
+          make package/xtables-wgobfs/compile V=s  2>&1 | tail -n 30
           
           #find . -name *wg*.ipk   # find . -name "*wg*.ipk" -exec cp {} /tmp \;
 
