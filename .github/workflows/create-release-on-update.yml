@@ -78,9 +78,13 @@ jobs:
           fi
           RELEASE_NAME=$(jq -r .name "$CACHE_FILE")
           
-          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          # Убираем первый символ 'v' из тега
+          CLEAN_TAG="${RELEASE_TAG#v}"
+          
+          echo "release_tag=${CLEAN_TAG}" >> $GITHUB_OUTPUT
+          echo "original_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
           echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
-          echo "Found OpenWRT release: ${RELEASE_TAG}"
+          echo "Found OpenWRT release: ${RELEASE_TAG} -> ${CLEAN_TAG}"
 
       - name: Check if release exists in your repo
         id: check_release
@@ -96,9 +100,12 @@ jobs:
           fi
           echo $NOW > .github/cache/api_last_call
 
+          # Используем оригинальный тег (с 'v') для проверки существования релиза
+          ORIGINAL_TAG="${{ steps.get_release.outputs.original_tag }}"
+
           # Кэшируем результаты проверки релиза
-          CACHE_FILE=".github/cache/release_check_${{ steps.get_release.outputs.release_tag }}.json"
-          CACHE_TIME_FILE=".github/cache/release_check_time_${{ steps.get_release.outputs.release_tag }}"
+          CACHE_FILE=".github/cache/release_check_${ORIGINAL_TAG}.json"
+          CACHE_TIME_FILE=".github/cache/release_check_time_${ORIGINAL_TAG}"
           USE_CACHE=false
 
           if [ -f "$CACHE_FILE" ] && [ -f "$CACHE_TIME_FILE" ]; then
@@ -113,7 +120,7 @@ jobs:
           if [ "$USE_CACHE" = false ]; then
             RESPONSE=$(curl -sL -w "%{http_code}" \
               -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases/tags/${{ steps.get_release.outputs.release_tag }} \
+              "https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases/tags/${ORIGINAL_TAG}" \
               -o "$CACHE_FILE")
             
             echo $NOW > "$CACHE_TIME_FILE"
@@ -153,7 +160,8 @@ jobs:
         run: |
           echo "Cache directory contents:"
           ls -la .github/cache/
-          echo "Current tag: ${{ steps.get_release.outputs.release_tag }}"
+          echo "Original tag: ${{ steps.get_release.outputs.original_tag }}"
+          echo "Clean tag: ${{ steps.get_release.outputs.release_tag }}"
           echo "Release exists: ${{ steps.check_release.outputs.release_exists }}"
 
       - name: Create release in your repo
@@ -167,15 +175,15 @@ jobs:
            |_______||   __|_____|__|__||________||__|  |____|
                     |__|  
           -----------------------------------------------------
-          OpenWrt ${{ steps.get_release.outputs.release_tag }}
+          OpenWrt ${{ steps.get_release.outputs.original_tag }}
           -----------------------------------------------------
           \`\`\`"
 
           curl -X POST https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg tag "${{ steps.get_release.outputs.release_tag }}" \
-                    --arg name "Build xt_wgobfs for all devices with openwrt ${{ steps.get_release.outputs.release_tag }}" \
+            -d "$(jq -n --arg tag "${{ steps.get_release.outputs.original_tag }}" \
+                    --arg name "Build xt_wgobfs for all devices with openwrt ${{ steps.get_release.outputs.original_tag }}" \
                     --arg body "$ART" \
                     '{ tag_name: $tag, name: $name, body: $body }')"
   
