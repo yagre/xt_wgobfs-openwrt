@@ -193,4 +193,3 @@ jobs:
     uses: ./.github/workflows/build-module.yml
     with:
       tag_name: ${{ needs.sync-releases.outputs.release_tag }}
-      inputs.version: ${{ needs.sync-releases.outputs.release_tag }}
