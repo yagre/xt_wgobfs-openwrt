@@ -82,9 +82,9 @@ jobs:
           CLEAN_TAG="${RELEASE_TAG#v}"
           
           echo "release_tag=${CLEAN_TAG}" >> $GITHUB_OUTPUT
-          echo "original_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
-          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
-          echo "Found OpenWRT release: ${RELEASE_TAG} -> ${CLEAN_TAG}"
+
+      - name: Set VERSION environment variable
+        run: echo "VERSION=${{ steps.get_release.outputs.release_tag }}" >> $GITHUB_ENV
 
       - name: Check if release exists in your repo
         id: check_release
