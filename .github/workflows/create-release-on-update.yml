@@ -186,8 +186,3 @@ jobs:
     uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@master
     with:
       tag_name: ${{ needs.sync-releases.outputs.release_tag }}
-
-      - name: Check cache status
-        run: |
-          echo "Cache file exists: $(test -f .github/cache/latest_release.json && echo 'yes' || echo 'no')"
-          echo "Cache age (if exists): $(if test -f .github/cache/cache_time; then echo $(($(date +%s) - $(cat .github/cache/cache_time))); else echo 'N/A'; fi) seconds"
