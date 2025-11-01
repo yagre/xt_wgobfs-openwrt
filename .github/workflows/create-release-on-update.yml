@@ -184,4 +184,4 @@ jobs:
     if: needs.sync-releases.outputs.release_exists == 'false'
     uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@master
     with:
-      tag_name: ${{ needs.sync-releases.outputs.release_tag }}
+      tag_name: ${{ substring(needs.sync-releases.outputs.release_tag, 1) }}
