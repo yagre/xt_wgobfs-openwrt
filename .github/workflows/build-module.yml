@@ -104,7 +104,7 @@ jobs:
           SDK_DOWNLOAD_URL="https://downloads.openwrt.org/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/${SDK_FILE}"
           echo "Downloading SDK: $SDK_DOWNLOAD_URL"
           
-          wget "$SDK_DOWNLOAD_URL"
+          wget -q --show-progress "$SDK_DOWNLOAD_URL"
           
           # Extract based on file extension
           if [[ "$SDK_FILE" == *.tar.zst ]]; then
