@@ -2,7 +2,7 @@ name: Create Release on OpenWRT Update
 
 on:
   schedule:
-   - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
+    - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
   workflow_dispatch: # Возможность вручную запустить Action
 
 jobs:
