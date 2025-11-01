@@ -2,7 +2,7 @@ name: Create Release on OpenWRT Update
 
 on:
   schedule:
-    - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
+   - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
   workflow_dispatch: # Возможность вручную запустить Action
 
 jobs:
@@ -182,6 +182,6 @@ jobs:
   run-build:
     needs: sync-releases
     if: needs.sync-releases.outputs.release_exists == 'false'
-    uses: ./.github/workflows/build-module.yml
+    uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@master
     with:
-      tag_name: ${{ needs.sync-releases.outputs.release_tag && needs.sync-releases.outputs.release_tag.startsWith('v') ? needs.sync-releases.outputs.release_tag.substring(1) : needs.sync-releases.outputs.release_tag }}
+      tag_name: ${{ needs.sync-releases.outputs.release_tag }}
