@@ -2,115 +2,164 @@ name: Create Release on OpenWRT Update
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'   # каждые 3 дня
-  workflow_dispatch:       # ручной запуск
+   - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
+  workflow_dispatch: # Возможность вручную запустить Action
 
 jobs:
   sync-releases:
     runs-on: ubuntu-latest
     outputs:
       release_exists: ${{ steps.check_release.outputs.release_exists }}
-      release_tag:    ${{ steps.get_release.outputs.release_tag }}      # v24.10.4
-      clean_tag:      ${{ steps.get_release.outputs.clean_tag }}        # 24.10.4
+      release_tag: ${{ steps.get_release.outputs.release_tag }} 
     steps:
-      - name: Checkout repo
+      - name: Checkout your repo
         uses: actions/checkout@v4
 
-      - name: Setup cache
+      - name: Setup cache directory
         run: |
           mkdir -p .github/cache
           touch .github/cache/api_last_call
 
-      # -----------------------------------------------------------------
-      # 1. Получаем последний релиз OpenWRT
-      # -----------------------------------------------------------------
-      - name: Get latest OpenWRT release
+      - name: Get the latest release from OpenWRT
         id: get_release
         run: |
+          # Функция для проверки rate limit
           check_rate_limit() {
-            LAST=$(cat .github/cache/api_last_call 2>/dev/null || echo 0)
+            LAST_CALL=$(cat .github/cache/api_last_call)
             NOW=$(date +%s)
-            [[ $((NOW - LAST)) -lt 2 ]] && sleep 2
+            if [ -n "$LAST_CALL" ]; then
+              DIFF=$((NOW - LAST_CALL))
+              if [ $DIFF -lt 2 ]; then  # Минимальный интервал 2 секунды между запросами
+                sleep 2
+              fi
+            fi
             echo $NOW > .github/cache/api_last_call
           }
 
-          CACHE=".github/cache/latest_release.json"
-          TIME=".github/cache/cache_time"
+          # Проверка кэша (действителен 1 час)
+          CACHE_FILE=".github/cache/latest_release.json"
+          CACHE_TIME_FILE=".github/cache/cache_time"
           NOW=$(date +%s)
+          USE_CACHE=false
 
-          if [[ -f "$CACHE" && -f "$TIME" ]]; then
-            AGE=$((NOW - $(cat "$TIME")))
-            [[ $AGE -lt 3600 ]] && USE_CACHE=true || USE_CACHE=false
-          else
-            USE_CACHE=false
+          if [ -f "$CACHE_FILE" ] && [ -f "$CACHE_TIME_FILE" ]; then
+            CACHE_TIME=$(cat "$CACHE_TIME_FILE")
+            DIFF=$((NOW - CACHE_TIME))
+            if [ $DIFF -lt 3600 ]; then  # Кэш действителен 1 час
+              USE_CACHE=true
+              echo "Using cached release data"
+            fi
           fi
 
-          if [[ $USE_CACHE == false ]]; then
+          if [ "$USE_CACHE" = false ]; then
             check_rate_limit
-            CODE=$(curl -sL -w "%{http_code}" \
+            RESPONSE=$(curl -sL -w "%{http_code}" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/openwrt/openwrt/releases/latest \
-              -o "$CACHE")
-            [[ $CODE -eq 200 ]] && echo $NOW > "$TIME"
+              -o "$CACHE_FILE")
+
+            if [ "$RESPONSE" != "200" ]; then
+              echo "Error: Failed to fetch latest release (HTTP $RESPONSE)"
+              # Если есть кэш, используем его даже если он устарел
+              if [ -f "$CACHE_FILE" ]; then
+                echo "Warning: Using outdated cache due to API error"
+              else
+                exit 1
+              fi
+            else
+              echo $NOW > "$CACHE_TIME_FILE"
+              echo "Updated cache with new release data"
+            fi
           fi
 
-          TAG=$(jq -r .tag_name "$CACHE")
-          CLEAN_TAG=${TAG#v}                     # <--- убираем v
-          echo "release_tag=$TAG"          >> $GITHUB_OUTPUT
-          echo "clean_tag=$CLEAN_TAG"      >> $GITHUB_OUTPUT
-          echo "OpenWRT tag: $TAG  →  clean: $CLEAN_TAG"
+          if ! RELEASE_TAG=$(jq -r .tag_name "$CACHE_FILE"); then
+            echo "Error: Failed to parse release tag"
+            exit 1
+          fi
+          RELEASE_NAME=$(jq -r .name "$CACHE_FILE")
+          
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          echo "Found OpenWRT release: ${RELEASE_TAG}"
 
-      # -----------------------------------------------------------------
-      # 2. Проверяем, есть ли уже такой релиз в нашем репозитории
-      # -----------------------------------------------------------------
-      - name: Check if release exists
+      - name: Check if release exists in your repo
         id: check_release
         run: |
-          TAG=${{ steps.get_release.outputs.release_tag }}
-          CACHE=".github/cache/release_check_$TAG.json"
-          TIME=".github/cache/release_check_time_$TAG"
-
+          # Проверка rate limit перед запросом
+          LAST_CALL=$(cat .github/cache/api_last_call)
           NOW=$(date +%s)
-          if [[ -f "$CACHE" && -f "$TIME" ]]; then
-            AGE=$((NOW - $(cat "$TIME")))
-            [[ $AGE -lt 3600 ]] && USE_CACHE=true || USE_CACHE=false
-          else
-            USE_CACHE=false
+          if [ -n "$LAST_CALL" ]; then
+            DIFF=$((NOW - LAST_CALL))
+            if [ $DIFF -lt 2 ]; then
+              sleep 2
+            fi
+          fi
+          echo $NOW > .github/cache/api_last_call
+
+          # Кэшируем результаты проверки релиза
+          CACHE_FILE=".github/cache/release_check_${{ steps.get_release.outputs.release_tag }}.json"
+          CACHE_TIME_FILE=".github/cache/release_check_time_${{ steps.get_release.outputs.release_tag }}"
+          USE_CACHE=false
+
+          if [ -f "$CACHE_FILE" ] && [ -f "$CACHE_TIME_FILE" ]; then
+            CACHE_TIME=$(cat "$CACHE_TIME_FILE")
+            DIFF=$((NOW - CACHE_TIME))
+            if [ $DIFF -lt 3600 ]; then
+              USE_CACHE=true
+              echo "Using cached release check data"
+            fi
           fi
 
-          if [[ $USE_CACHE == false ]]; then
-            CODE=$(curl -sL -w "%{http_code}" \
+          if [ "$USE_CACHE" = false ]; then
+            RESPONSE=$(curl -sL -w "%{http_code}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases/tags/$TAG" \
-              -o "$CACHE")
-            echo $NOW > "$TIME"
-          fi
+              https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases/tags/${{ steps.get_release.outputs.release_tag }} \
+              -o "$CACHE_FILE")
+            
+            echo $NOW > "$CACHE_TIME_FILE"
 
-          if [[ $CODE == "404" ]] || [[ ! -s "$CACHE" ]]; then
-            echo "release_exists=false" >> $GITHUB_OUTPUT
+            if [ "$RESPONSE" = "404" ]; then
+              echo "release_exists=false" >> $GITHUB_OUTPUT
+              echo "Release does not exist in repo"
+            elif [ "$RESPONSE" = "200" ]; then
+              echo "release_exists=true" >> $GITHUB_OUTPUT
+              echo "Release already exists in repo"
+            else
+              echo "Error: Unexpected response checking release (HTTP $RESPONSE)"
+              if [ -f "$CACHE_FILE" ]; then
+                echo "Warning: Using outdated cache due to API error"
+                RESPONSE=$(cat "$CACHE_FILE")
+                if [ -n "$RESPONSE" ]; then
+                  echo "release_exists=true" >> $GITHUB_OUTPUT
+                else
+                  echo "release_exists=false" >> $GITHUB_OUTPUT
+                fi
+              else
+                exit 1
+              fi
+            fi
           else
-            echo "release_exists=true"  >> $GITHUB_OUTPUT
+            # Используем кэшированные данные
+            if [ -s "$CACHE_FILE" ]; then
+              echo "release_exists=true" >> $GITHUB_OUTPUT
+              echo "Release exists (from cache)"
+            else
+              echo "release_exists=false" >> $GITHUB_OUTPUT
+              echo "Release does not exist (from cache)"
+            fi
           fi
 
-      # -----------------------------------------------------------------
-      # 3. Диагностика (можно удалить после отладки)
-      # -----------------------------------------------------------------
-      - name: Debug info
+      - name: Debug information
         run: |
-          echo "=== CACHE ==="
+          echo "Cache directory contents:"
           ls -la .github/cache/
-          echo "=== TAG INFO ==="
-          echo "Full tag   : ${{ steps.get_release.outputs.release_tag }}"
-          echo "Clean tag  : ${{ steps.get_release.outputs.clean_tag }}"
-          echo "Exists?    : ${{ steps.check_release.outputs.release_exists }}"
+          echo "Current tag: ${{ steps.get_release.outputs.release_tag }}"
+          echo "Release exists: ${{ steps.check_release.outputs.release_exists }}"
 
-      # -----------------------------------------------------------------
-      # 4. Создаём релиз, если его ещё нет
-      # -----------------------------------------------------------------
-      - name: Create release
+      - name: Create release in your repo
         if: steps.check_release.outputs.release_exists == 'false'
         run: |
-          ART=$(cat <<'EOF'
+          ART="
           \`\`\`
             _______                     ________        __
            |       |.-----.-----.-----.|  |  |  |.----.|  |_
@@ -118,29 +167,21 @@ jobs:
            |_______||   __|_____|__|__||________||__|  |____|
                     |__|  
           -----------------------------------------------------
-          OpenWrt ${{ steps.get_release.outputs.clean_tag }}
+          OpenWrt ${{ steps.get_release.outputs.release_tag }}
           -----------------------------------------------------
-          \`\`\`
-          EOF
-          )
+          \`\`\`"
 
           curl -X POST https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n \
-              --arg tag  "${{ steps.get_release.outputs.clean_tag }}" \
-              --arg name "Build xt_wgobfs for OpenWrt ${{ steps.get_release.outputs.clean_tag }}" \
-              --arg body "$ART" \
-              '{tag_name:$tag, name:$name, body:$body}')"
-
-  # -----------------------------------------------------------------
-  # 5. Запускаем сборку (только если релиз новый)
-  # -----------------------------------------------------------------
+            -d "$(jq -n --arg tag "${{ steps.get_release.outputs.release_tag }}" \
+                    --arg name "Build xt_wgobfs for all devices with openwrt ${{ steps.get_release.outputs.release_tag }}" \
+                    --arg body "$ART" \
+                    '{ tag_name: $tag, name: $name, body: $body }')"
+  
   run-build:
     needs: sync-releases
     if: needs.sync-releases.outputs.release_exists == 'false'
-    runs-on: ubuntu-latest
-    uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@main
+    uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@master
     with:
-      # Передаём **БЕЗ** префикса v
-      tag_name: ${{ needs.sync-releases.outputs.clean_tag }}
+      tag_name: ${{ needs.sync-releases.outputs.release_tag }}
