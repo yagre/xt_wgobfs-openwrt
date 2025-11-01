@@ -1,4 +1,4 @@
-name: Sync OpenWRT Releases
+name: Create Release on OpenWRT Update
 
 on:
   schedule:
