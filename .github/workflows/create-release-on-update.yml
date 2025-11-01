@@ -183,5 +183,5 @@ jobs:
     needs: sync-releases
     if: needs.sync-releases.outputs.release_exists == 'false'
     uses: ./.github/workflows/build-module.yml
-    with:
-      tag_name: ${{ needs.sync-releases.outputs.release_tag }}
+  with:
+    tag_name: ${{ needs.sync-releases.outputs.release_tag && needs.sync-releases.outputs.release_tag.startsWith('v') ? needs.sync-releases.outputs.release_tag.substring(1) : needs.sync-releases.outputs.release_tag }}
