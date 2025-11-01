@@ -182,6 +182,6 @@ jobs:
   run-build:
     needs: sync-releases
     if: needs.sync-releases.outputs.release_exists == 'false'
-    uses: yagre/xt_wgobfs-openwrt/.github/workflows/build-module.yml@master
+    uses: ./.github/workflows/build-module.yml
     with:
       tag_name: ${{ needs.sync-releases.outputs.release_tag }}
