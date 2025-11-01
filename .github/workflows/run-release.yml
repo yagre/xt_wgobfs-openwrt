@@ -4,6 +4,11 @@ on:
   schedule:
    - cron: '0 0 */3 * *' # Проверка новых релизов раз в три дня
   workflow_dispatch: # Возможность вручную запустить Action
+    inputs:
+      version:
+        description: 'OpenWRT version (e.g., 24.10.3)'
+        required: false
+        type: string
 
 jobs:
   sync-releases:
@@ -35,48 +40,52 @@ jobs:
             fi
             echo $NOW > .github/cache/api_last_call
           }
+          if [ -z "${{ inputs.version }}" ]; then
+            # Проверка кэша (действителен 1 час)
+            CACHE_FILE=".github/cache/latest_release.json"
+            CACHE_TIME_FILE=".github/cache/cache_time"
+            NOW=$(date +%s)
+            USE_CACHE=false
 
-          # Проверка кэша (действителен 1 час)
-          CACHE_FILE=".github/cache/latest_release.json"
-          CACHE_TIME_FILE=".github/cache/cache_time"
-          NOW=$(date +%s)
-          USE_CACHE=false
-
-          if [ -f "$CACHE_FILE" ] && [ -f "$CACHE_TIME_FILE" ]; then
-            CACHE_TIME=$(cat "$CACHE_TIME_FILE")
-            DIFF=$((NOW - CACHE_TIME))
-            if [ $DIFF -lt 3600 ]; then  # Кэш действителен 1 час
-              USE_CACHE=true
-              echo "Using cached release data"
-            fi
-          fi
-
-          if [ "$USE_CACHE" = false ]; then
-            check_rate_limit
-            RESPONSE=$(curl -sL -w "%{http_code}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/openwrt/openwrt/releases/latest \
-              -o "$CACHE_FILE")
-
-            if [ "$RESPONSE" != "200" ]; then
-              echo "Error: Failed to fetch latest release (HTTP $RESPONSE)"
-              # Если есть кэш, используем его даже если он устарел
-              if [ -f "$CACHE_FILE" ]; then
-                echo "Warning: Using outdated cache due to API error"
-              else
-                exit 1
+            if [ -f "$CACHE_FILE" ] && [ -f "$CACHE_TIME_FILE" ]; then
+              CACHE_TIME=$(cat "$CACHE_TIME_FILE")
+              DIFF=$((NOW - CACHE_TIME))
+              if [ $DIFF -lt 3600 ]; then  # Кэш действителен 1 час
+                USE_CACHE=true
+                echo "Using cached release data"
               fi
-            else
-              echo $NOW > "$CACHE_TIME_FILE"
-              echo "Updated cache with new release data"
             fi
-          fi
 
-          if ! RELEASE_TAG=$(jq -r .tag_name "$CACHE_FILE"); then
-            echo "Error: Failed to parse release tag"
-            exit 1
+            if [ "$USE_CACHE" = false ]; then
+              check_rate_limit
+              RESPONSE=$(curl -sL -w "%{http_code}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                https://api.github.com/repos/openwrt/openwrt/releases/latest \
+                -o "$CACHE_FILE")
+
+              if [ "$RESPONSE" != "200" ]; then
+                echo "Error: Failed to fetch latest release (HTTP $RESPONSE)"
+                # Если есть кэш, используем его даже если он устарел
+                if [ -f "$CACHE_FILE" ]; then
+                  echo "Warning: Using outdated cache due to API error"
+                else
+                  exit 1
+                fi
+              else
+                echo $NOW > "$CACHE_TIME_FILE"
+                echo "Updated cache with new release data"
+              fi
+            fi
+
+            if ! RELEASE_TAG=$(jq -r .tag_name "$CACHE_FILE"); then
+              echo "Error: Failed to parse release tag"
+              exit 1
+            fi
+            RELEASE_NAME=$(jq -r .name "$CACHE_FILE")
+          else
+            RELEASE_TAG="v${{ inputs.version }}"
+            #RELEASE_NAME="OpenWRT ${{ inputs.version }}"
           fi
-          RELEASE_NAME=$(jq -r .name "$CACHE_FILE")
 
           # Сохраняем оригинальный тег (с v)
           echo "original_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
