@@ -148,7 +148,9 @@ jobs:
           fi
           
           cd "$SDK_DIR"
-          
+          # Replace src-git-full with src-git to simplify base feeds update
+          sed -i 's|src-git-full|src-git|g' feeds.conf.default
+
           # Function to update feeds with multiple fallbacks
           update_feeds_robust() {
             local attempt=1
@@ -166,7 +168,6 @@ jobs:
                 cat feeds.conf.default
                 cp feeds.conf.default feeds.conf.default.backup
                 # Replace both URLs
-                sed -i 's|src-git-full|src-git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
