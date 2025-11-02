@@ -166,11 +166,12 @@ jobs:
                 cat feeds.conf.default
                 cp feeds.conf.default feeds.conf.default.backup
                 # Replace both URLs
+                sed -i 's|src-git-full|src-git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
+                sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
                 echo "Updated feeds.conf.default:"
                 cat feeds.conf.default
               fi
@@ -212,7 +213,6 @@ jobs:
           mv ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs
           
           make defconfig
-
 
       - name: Build xt_wgobfs packages
         run: |
