@@ -222,7 +222,7 @@ jobs:
           cd "$SDK_DIR"
 
           echo "Building xt_wgobfs packages..."
-          make package/xtables-wgobfs/compile V=s  2>&1 | tail -n 30
+          make package/xtables-wgobfs/compile -j$(nproc) V=s  2>&1 | tail -n 30
           
           #find . -name *wg*.ipk   # find . -name "*wg*.ipk" -exec cp {} /tmp \;
 
