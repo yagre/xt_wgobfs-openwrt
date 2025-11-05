@@ -104,7 +104,8 @@ jobs:
             echo "Trying mirror: $MIRROR"
             
             SDK_FILE=$(curl -s "$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/" | grep -o "openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
-            
+            echo "Searching for SDK file at $MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
+            echo "Searching for SDK file as pattern: openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-*_musl_*.Linux-x86_64.tar.[xz|zst]"
             if [ -n "$SDK_FILE" ]; then
               SDK_DOWNLOAD_URL="$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/${SDK_FILE}"
               echo "Found SDK at: $SDK_DOWNLOAD_URL"
