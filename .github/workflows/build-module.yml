@@ -93,10 +93,11 @@ jobs:
         run: |
           echo "pkgarch: ${{ matrix.build_env.pkgarch}}, target:${{ matrix.build_env.target}}, subtarget: ${{ matrix.build_env.subtarget}}"
 
-          # Try mirror first, then fallback to main site
+          # Try mirror first, then fallback to main site, or archive for older versions
           MIRRORS=(
             "https://mirror-03.infra.openwrt.org"
             "https://downloads.openwrt.org"
+            "https://archive.openwrt.org/"
           )
           
           for MIRROR in "${MIRRORS[@]}"; do
