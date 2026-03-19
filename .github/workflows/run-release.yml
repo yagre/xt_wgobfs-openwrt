@@ -61,26 +61,34 @@ jobs:
         if: steps.check_release.outputs.release_exists == 'false'
         run: |
           ORIGINAL_TAG="${{ steps.get_release.outputs.original_tag }}"
-          ART="
-          \`\`\`
-            _______                     ________        __
-           |       |.-----.-----.-----.|  |  |  |.----.|  |_
-           |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
-           |_______||   __|_____|__|__||________||__|  |____|
-                    |__|
-          -----------------------------------------------------
-          OpenWrt ${ORIGINAL_TAG}
-          -----------------------------------------------------
-          \`\`\`"
+          
+          # Формируем тело сообщения
+          BODY_TEXT=$(cat <<'EOF'
+```
+  _______                     ________        __
+ |       |.-----.-----.-----.|  |  |  |.----.|  |_
+ |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
+ |_______||   __|_____|__|__||________||__|  |____|
+          |__|
+-----------------------------------------------------
+OpenWrt TAG_PLACEHOLDER
+-----------------------------------------------------
+```
+EOF
+          )
+          BODY_TEXT="${BODY_TEXT/TAG_PLACEHOLDER/$ORIGINAL_TAG}"
+          
+          # Используем jq для безопасного формирования JSON
+          JSON_PAYLOAD=$(jq -n \
+            --arg tag "$ORIGINAL_TAG" \
+            --arg name "Build xt_wgobfs for OpenWrt $ORIGINAL_TAG" \
+            --arg body "$BODY_TEXT" \
+            '{tag_name: $tag, name: $name, body: $body}')
 
           curl -X POST https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"tag_name\": \"${ORIGINAL_TAG}\",
-              \"name\": \"Build xt_wgobfs for OpenWrt ${ORIGINAL_TAG}\",
-              \"body\": ${ART@Q}
-            }"
+            -d "$JSON_PAYLOAD"
 
   run-build:
     needs: sync-releases
