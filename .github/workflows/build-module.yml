@@ -13,15 +13,15 @@ on:
     inputs:
       version:
         description: 'OpenWRT version (e.g., 24.10.3)'
-        required: true
+        required: false
         type: string
       targets:
         description: 'Targets (comma-separated, e.g., "stm32,ramips")'
-        required: true
+        required: false
         type: string
       subtargets:
         description: 'Subtargets (comma-separated, e.g., "stm32mp1,mt7621")'
-        required: true
+        required: false
         type: string
 
 permissions:
