@@ -174,7 +174,9 @@ async function getDetails(target, subtarget) {
       // Extract vermagic from version: "6.12.71~abc123-r1" → "abc123"
       const versionMatch = kernel.version.match(/~([a-f0-9]+)-r\d+$/);
       const vermagic = versionMatch ? versionMatch[1] : '';
-      const pkgarch = kernel.architecture || kernel.pkgarch || '';
+      // Get architecture and strip revision suffix (e.g., "arm_cortex-a5_vfpv4-r1" → "arm_cortex-a5_vfpv4")
+      let pkgarch = kernel.architecture || kernel.pkgarch || '';
+      pkgarch = pkgarch.replace(/-r\d+$/, '');
       if (vermagic && pkgarch) {
         return { vermagic, pkgarch };
       }
