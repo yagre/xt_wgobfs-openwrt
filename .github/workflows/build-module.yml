@@ -152,12 +152,19 @@ jobs:
           # FIX 1: Remove recursive dependency
           sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
 
-          # FIX 2: Disable external source download (use local src folder)
-          sed -i 's/PKG_SOURCE_URL:=.*/PKG_SOURCE_URL:=./' package/xt_wgobfs/Makefile
-          sed -i 's/PKG_HASH:=.*/PKG_HASH:=skip/' package/xt_wgobfs/Makefile
+          # FIX 2: Create fake download file so SDK doesn't try to download
+          mkdir -p dl
+          touch dl/xt_wgobfs-0.6.2.tar.xz
 
-          # FIX 3: Insert Build/Configure after any line containing 'package.mk'
+          # FIX 3: Override Build/Prepare and Build/Configure
+          # Build/Prepare: copy local src instead of extracting downloaded archive
+          # Build/Configure: run autoreconf for automake compatibility
           sed -i '/package.mk/a \
+          \
+          define Build/Prepare\
+          	mkdir -p $(PKG_BUILD_DIR)\
+          	cp -r $(CURDIR)/package/xt_wgobfs/src/* $(PKG_BUILD_DIR)/\
+          endef\
           \
           define Build/Configure\
           	(cd $(PKG_BUILD_DIR); autoreconf -fi || true);\
