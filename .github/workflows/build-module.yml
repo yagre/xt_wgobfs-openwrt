@@ -124,7 +124,14 @@ jobs:
 
       - name: Setup SDK and feeds
         run: |
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -n1)
+          if [ -z "$SDK_DIR" ]; then
+            SDK_DIR=$(find . -maxdepth 1 -type l -name "openwrt-sdk-*" | head -n1)
+          fi
+          if [ -z "$SDK_DIR" ]; then
+            echo "SDK directory not found"
+            exit 1
+          fi
           cd "$SDK_DIR"
           sed -i 's|src-git-full|src-git|g' feeds.conf.default
 
@@ -143,21 +150,29 @@ jobs:
 
           update_feeds_robust || exit 1
           ./scripts/feeds install xtables-addons
-          
-          git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
+
+          git clone --depth 1 https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
           mkdir -p ./package/feeds/packages/xtables-wgobfs
           cp ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
           make defconfig
 
       - name: Build xt_wgobfs packages
         run: |
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          SDK_DIR=$(find . -maxdepth 1 \( -type d -o -type l \) -name "openwrt-sdk-*" | head -n1)
+          if [ -z "$SDK_DIR" ]; then
+            echo "SDK directory not found"
+            exit 1
+          fi
           make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(($(nproc) + 1))
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
         run: |
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
+          SDK_DIR=$(find . -maxdepth 1 \( -type d -o -type l \) -name "openwrt-sdk-*" | head -n1)
+          if [ -z "$SDK_DIR" ]; then
+            echo "SDK directory not found"
+            exit 1
+          fi
           mkdir -p wgobfsrelease
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
             filename=$(basename "$file")
