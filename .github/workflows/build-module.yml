@@ -163,7 +163,8 @@ jobs:
             echo "SDK directory not found"
             exit 1
           fi
-          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(($(nproc) + 1))
+          # Build only the package, skip toolchain/tools rebuild
+          make -C "$SDK_DIR" package/feeds/packages/xtables-wgobfs/compile -j$(($(nproc) + 1))
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
