@@ -225,29 +225,32 @@ jobs:
 
           echo "Building xt_wgobfs packages..."
           make package/xtables-wgobfs/compile -j$(nproc) V=s  2>&1 | tail -n 30
-          
+
           #find . -name *wg*.ipk   # find . -name "*wg*.ipk" -exec cp {} /tmp \;
 
           echo "Build completed. Checking for built packages..."
-          find bin/ -name "*.ipk" | grep -E "(wgobfs)" | head -10
+          find bin/ -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | head -n 10
 
       - name: Prepare artifacts
         run: |
           # Find SDK directory
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          
+
           mkdir -p wgobfsrelease
-          postfix="v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch}}_${{ matrix.build_env.target}}_${{ matrix.build_env.subtarget}}"
-          
-          # Copy built packages
-          find "$SDK_DIR/bin/packages" -name "iptables-mod-wgobfs_*.ipk" -exec cp {} wgobfsrelease/iptables-mod-wgobfs_${postfix}.ipk \; || echo "iptables-mod-wgobfs package not found"
-          find "$SDK_DIR/bin/targets" -name "kmod-ipt-wgobfs_*.ipk" -exec cp {} wgobfsrelease/kmod-ipt-wgobfs_${postfix}.ipk \; || echo "kmod-ipt-wgobfs package not found"
-          
-          echo "Built packages:"
+
+          # Copy built packages (both .ipk and .apk)
+          find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
+            filename=$(basename "$file")
+            ext="${filename##*.}"
+            base="${filename%.*}"
+            cp "$file" "wgobfsrelease/${base}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch}}.${ext}"
+          done
+
+          echo "Packages prepared for release:"
           ls -la wgobfsrelease/
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: wgobfsrelease/*.ipk
+          files: wgobfsrelease/*
           tag_name: v${{ matrix.build_env.tag }}
