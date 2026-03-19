@@ -163,8 +163,8 @@ jobs:
             echo "SDK directory not found"
             exit 1
           fi
-          # Build only our package
-          make -C "$SDK_DIR" package/xt_wgobfs/compile -j$(($(nproc) + 1))
+          # Build with verbose output to see the actual error
+          make -C "$SDK_DIR" package/xt_wgobfs/compile -j1 V=s
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
