@@ -149,7 +149,7 @@ jobs:
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
             ext="${file##*.}"
             base=$(basename "$file" ".$ext")
-            cp "$file" "wgobfsrelease/${base}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.target }}_${{ matrix.build_env.pkgarch }}.${ext}"
+            cp "$file" "wgobfsrelease/${base}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.target }}_${{ matrix.build_env.subtarget }}_${{ matrix.build_env.pkgarch }}.${ext}"
           done
 
       - name: Release
