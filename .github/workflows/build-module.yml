@@ -139,7 +139,7 @@ jobs:
       - name: Build xt_wgobfs packages
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(nproc)
+          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(($(nproc) + 1))
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
