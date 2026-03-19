@@ -124,6 +124,10 @@ jobs:
 
       - name: Setup SDK and feeds
         run: |
+          # Install autotools for regenerating package configs
+          sudo apt-get update
+          sudo apt-get install -y automake autoconf libtool gettext
+
           SDK_DIR=$(find . -maxdepth 1 \( -type d -o -type l \) -name "openwrt-sdk-*" | head -n1)
           if [ -z "$SDK_DIR" ]; then
             echo "SDK directory not found"
@@ -131,29 +135,26 @@ jobs:
           fi
           cd "$SDK_DIR"
           
-          # Clean old traces
-          rm -rf package/xt_wgobfs
-          
-          # 1. Update feeds (base needed for kernel headers)
+          # Update feeds
           ./scripts/feeds update -q base
-          ./scripts/feeds install -q kmod-ipt-core libxtables
+          ./scripts/feeds install -q kmod-ipt-core libxtables iptables
           
-          # 2. Clone sources to temp folder OUTSIDE SDK
-          git clone --depth 1 https://github.com/infinet/xt_wgobfs.git /tmp/xt_wgobfs
-          
-          # 3. Create ONE clean package folder
+          # Prepare package folder
+          rm -rf package/xt_wgobfs
           mkdir -p package/xt_wgobfs
           
-          # Copy Makefile
-          cp /tmp/xt_wgobfs/openwrt/package/Makefile package/xt_wgobfs/Makefile
-          
-          # Remove recursive dependency (fixes "recursive dependency" error)
-          sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
-          
-          # 4. Copy src folder inside so Makefile can find it
+          git clone --depth 1 https://github.com/infinet/xt_wgobfs.git /tmp/xt_wgobfs
+          cp -r /tmp/xt_wgobfs/openwrt/package/Makefile package/xt_wgobfs/
           cp -r /tmp/xt_wgobfs/src package/xt_wgobfs/
           
-          # Generate config
+          # Regenerate autotools files to match current automake version
+          cd package/xt_wgobfs
+          autoreconf -fi || true
+          cd ../..
+          
+          # Remove recursive dependency
+          sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
+          
           make defconfig
 
       - name: Build xt_wgobfs packages
