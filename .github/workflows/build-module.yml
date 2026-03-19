@@ -152,12 +152,12 @@ jobs:
           # Override Build/Configure to run autoreconf after extract
           cat >> package/xt_wgobfs/Makefile << 'MAKEEOF'
 
-# Run autoreconf after unpacking to fix automake version mismatch
-define Build/Configure
-    (cd $(PKG_BUILD_DIR); autoreconf -fi || true)
-    $(call Build/Configure/Default)
-endef
-MAKEEOF
+          # Run autoreconf after unpacking to fix automake version mismatch
+          define Build/Configure
+              (cd $(PKG_BUILD_DIR); autoreconf -fi || true)
+              $(call Build/Configure/Default)
+          endef
+          MAKEEOF
 
           # Remove recursive dependency
           sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
@@ -198,11 +198,11 @@ MAKEEOF
           tag_name: v${{ matrix.build_env.tag }}
           body: |
             ```
-              _______                     ________        __
-             |       |.-----.-----.-----.|  |  |  |.----.|  |_
-             |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
-             |_______||   __|_____|__|__||________||__|  |____|
-                      |__|
+            ._______                     ________        __
+            |       |.-----.-----.-----.|  |  |  |.----.|  |_
+            |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
+            |_______||   __|_____|__|__||________||__|  |____|
+                    '|__|
             -----------------------------------------------------
             OpenWrt v${{ matrix.build_env.tag }}
             -----------------------------------------------------
