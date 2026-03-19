@@ -145,12 +145,19 @@ jobs:
           
           git clone --depth 1 https://github.com/infinet/xt_wgobfs.git /tmp/xt_wgobfs
           cp -r /tmp/xt_wgobfs/openwrt/package/Makefile package/xt_wgobfs/
+          
+          # Copy src folder
           cp -r /tmp/xt_wgobfs/src package/xt_wgobfs/
           
-          # Regenerate autotools files to match current automake version
-          cd package/xt_wgobfs
-          autoreconf -fi || true
-          cd ../..
+          # Override Build/Configure to run autoreconf after extract
+          cat >> package/xt_wgobfs/Makefile << 'MAKEEOF'
+
+# Run autoreconf after unpacking to fix automake version mismatch
+define Build/Configure
+	(cd $(PKG_BUILD_DIR); autoreconf -fi || true)
+	$(call Build/Configure/Default)
+endef
+MAKEEOF
           
           # Remove recursive dependency
           sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
