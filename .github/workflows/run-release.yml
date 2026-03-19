@@ -62,8 +62,8 @@ jobs:
         run: |
           ORIGINAL_TAG="${{ steps.get_release.outputs.original_tag }}"
           
-          # Формируем тело сообщения с ASCII-артом
-          read -r -d '' BODY_TEXT <<'EOF' || true
+          # Используем cat для чистого захвата текста без искажений Bash
+          cat <<'EOF' > body.txt
 ```
   _______                     ________        __
  |       |.-----.-----.-----.|  |  |  |.----.|  |_
@@ -75,19 +75,24 @@ OpenWrt TAG_PLACEHOLDER
 -----------------------------------------------------
 ```
 EOF
-          BODY_TEXT="${BODY_TEXT/TAG_PLACEHOLDER/$ORIGINAL_TAG}"
+
+          # Заменяем плейсхолдер в файле
+          sed -i "s/TAG_PLACEHOLDER/$ORIGINAL_TAG/g" body.txt
           
-          # Используем jq для безопасного формирования JSON
-          JSON_PAYLOAD=$(jq -n \
+          # Читаем файл в переменную для jq
+          FINAL_BODY=$(cat body.txt)
+
+          # Формируем JSON через jq (максимально безопасно)
+          jq -n \
             --arg tag "$ORIGINAL_TAG" \
             --arg name "Build xt_wgobfs for OpenWrt $ORIGINAL_TAG" \
-            --arg body "$BODY_TEXT" \
-            '{tag_name: $tag, name: $name, body: $body}')
+            --arg body "$FINAL_BODY" \
+            '{tag_name: $tag, name: $name, body: $body}' > payload.json
 
           curl -X POST https://api.github.com/repos/yagre/xt_wgobfs-openwrt/releases \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD"
+            -d @payload.json
 
   run-build:
     needs: sync-releases
