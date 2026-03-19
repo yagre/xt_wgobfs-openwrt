@@ -2,11 +2,10 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const core = require('@actions/core');
 
-const version = process.argv[2]; // Получение версии OpenWRT из аргумента командной строки
-const filterTargetsStr = process.argv[3] || ''; // Фильтр по targets (опционально, через запятую)
-const filterSubtargetsStr = process.argv[4] || ''; // Фильтр по subtargets (опционально, через запятую)
+const version = process.argv[2];
+const filterTargetsStr = process.argv[3] || '';
+const filterSubtargetsStr = process.argv[4] || '';
 
-// Преобразуем строки с запятыми в массивы
 const filterTargets = filterTargetsStr ? filterTargetsStr.split(',').map(t => t.trim()).filter(t => t) : [];
 const filterSubtargets = filterSubtargetsStr ? filterSubtargetsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
@@ -15,104 +14,115 @@ if (!version) {
   process.exit(1);
 }
 
-const url = `https://downloads.openwrt.org/releases/${version}/targets/`;
+const MIRRORS = [
+  'https://downloads.openwrt.org',
+  'https://mirror-03.infra.openwrt.org',
+  'https://archive.openwrt.org'
+];
 
-async function fetchHTML(url) {
-  try {
-    const { data } = await axios.get(url);
-    return cheerio.load(data);
-  } catch (error) {
-    console.error(`Error fetching HTML for ${url}: ${error}`);
-    throw error;
+let baseUrl = MIRRORS[0];
+
+async function fetchHTML(url, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const { data } = await axios.get(url, { timeout: 10000 });
+      return cheerio.load(data);
+    } catch (error) {
+      console.error(`Attempt ${attempt}/${retries} failed for ${url}: ${error.message}`);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, attempt * 1000));
+      }
+    }
   }
+  return null;
+}
+
+async function getItems(url) {
+  const $ = await fetchHTML(url);
+  if (!$) return [];
+  const items = [];
+  $('table tr td.n a, a').each((_, el) => {
+    const name = $(el).attr('href');
+    if (name && name.endsWith('/') && name !== '../') {
+      items.push(name.slice(0, -1));
+    }
+  });
+  return items;
 }
 
 async function getTargets() {
-  const $ = await fetchHTML(url);
-  const targets = [];
-  $('table tr td.n a').each((index, element) => {
-    const name = $(element).attr('href');
-    if (name && name.endsWith('/')) {
-      targets.push(name.slice(0, -1));
+  for (const mirror of MIRRORS) {
+    const url = `${mirror}/releases/${version}/targets/`;
+    const items = await getItems(url);
+    if (items.length > 0) {
+      baseUrl = mirror;
+      return items;
     }
-  });
-  return targets;
-}
-
-async function getSubtargets(target) {
-  const $ = await fetchHTML(`${url}${target}/`);
-  const subtargets = [];
-  $('table tr td.n a').each((index, element) => {
-    const name = $(element).attr('href');
-    if (name && name.endsWith('/')) {
-      subtargets.push(name.slice(0, -1));
-    }
-  });
-  return subtargets;
+  }
+  return [];
 }
 
 async function getDetails(target, subtarget) {
-  const packagesUrl = `${url}${target}/${subtarget}/packages/`;
+  const packagesUrl = `${baseUrl}${target}/${subtarget}/packages/`;
   const $ = await fetchHTML(packagesUrl);
+  if (!$) return { vermagic: '', pkgarch: '' };
+
   let vermagic = '';
   let pkgarch = '';
 
-  $('a').each((index, element) => {
-    const name = $(element).attr('href');
+  $('a').each((_, el) => {
+    const name = $(el).attr('href');
     if (name && name.startsWith('kernel_')) {
-      const vermagicMatch = name.match(/kernel_\d+\.\d+\.\d+(?:-\d+)?[-~]([a-f0-9]+)(?:-r\d+)?_([a-zA-Z0-9_-]+)\.ipk$/);
-      if (vermagicMatch) {
-        vermagic = vermagicMatch[1];
-        pkgarch = vermagicMatch[2];
+      // Улучшенное регулярное выражение: поддерживает .ipk и .apk
+      const match = name.match(/kernel_.*[-~]([a-f0-9]+)_([a-zA-Z0-9_-]+)\.(?:ipk|apk)$/);
+      if (match) {
+        vermagic = match[1];
+        pkgarch = match[2];
       }
     }
   });
-
   return { vermagic, pkgarch };
 }
 
 async function main() {
   try {
     const targets = await getTargets();
+    if (targets.length === 0) {
+      core.setFailed(`No targets found for version ${version}. Check if version exists.`);
+      return;
+    }
+
     const jobConfig = [];
 
     for (const target of targets) {
-      // Пропускаем target, если указан массив фильтров и target не входит в него
-      if (filterTargets.length > 0 && !filterTargets.includes(target)) {
-        continue;
-      }
+      if (filterTargets.length > 0 && !filterTargets.includes(target)) continue;
 
-      const subtargets = await getSubtargets(target);
+      const subtargets = await getItems(`${baseUrl}${target}/`);
+
       for (const subtarget of subtargets) {
-        // Пропускаем subtarget, если указан массив фильтров и subtarget не входит в него
-        if (filterSubtargets.length > 0 && !filterSubtargets.includes(subtarget)) {
-          continue;
-        }
+        if (filterSubtargets.length > 0 && !filterSubtargets.includes(subtarget)) continue;
 
-        // Добавляем в конфигурацию только если:
-        // 1. Оба массива пустые (автоматическая сборка по тегу) - собираем всё
-        // 2. Оба массива НЕ пустые (ручной запуск) - target И subtarget должны быть в своих массивах
-        const isAutomatic = filterTargets.length === 0 && filterSubtargets.length === 0;
-        const isManualMatch = filterTargets.length > 0 && filterSubtargets.length > 0 &&
-                              filterTargets.includes(target) && filterSubtargets.includes(subtarget);
-        
-        if (!isAutomatic && !isManualMatch) {
-          continue;
-        }
-
+        console.log(`Processing: ${target}/${subtarget}`);
         const { vermagic, pkgarch } = await getDetails(target, subtarget);
 
-        jobConfig.push({
-          tag: version,
-          target,
-          subtarget,
-          vermagic,
-          pkgarch,
-        });
+        if (pkgarch) {
+          jobConfig.push({
+            tag: version,
+            target,
+            subtarget,
+            vermagic,
+            pkgarch,
+          });
+        }
       }
     }
 
-    core.setOutput('job-config', JSON.stringify(jobConfig));
+    if (jobConfig.length === 0) {
+      core.setFailed("No targets found to build. Check your filters.");
+    } else {
+      console.log(`Total jobs generated: ${jobConfig.length}`);
+      core.setOutput('job-config', JSON.stringify(jobConfig));
+    }
   } catch (error) {
     core.setFailed(error.message);
   }
