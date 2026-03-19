@@ -152,12 +152,16 @@ jobs:
           # FIX 1: Remove recursive dependency
           sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
 
-          # FIX 2: Insert Build/Configure BEFORE BuildPackage call
-          sed -i '/include ..package.mk/a \
+          # FIX 2: Disable external source download (use local src folder)
+          sed -i 's/PKG_SOURCE_URL:=.*/PKG_SOURCE_URL:=./' package/xt_wgobfs/Makefile
+          sed -i 's/PKG_HASH:=.*/PKG_HASH:=skip/' package/xt_wgobfs/Makefile
+
+          # FIX 3: Insert Build/Configure after any line containing 'package.mk'
+          sed -i '/package.mk/a \
           \
           define Build/Configure\
-              (cd $(PKG_BUILD_DIR); autoreconf -fi || true);\
-              $(call Build/Configure/Default)\
+          	(cd $(PKG_BUILD_DIR); autoreconf -fi || true);\
+          	$(call Build/Configure/Default)\
           endef' package/xt_wgobfs/Makefile
 
           make defconfig
