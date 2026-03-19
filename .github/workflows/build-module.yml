@@ -133,27 +133,45 @@ jobs:
             exit 1
           fi
           cd "$SDK_DIR"
-          sed -i 's|src-git-full|src-git|g' feeds.conf.default
+          
+          FEEDS_FILE="feeds.conf.default"
+          [ ! -f "$FEEDS_FILE" ] && FEEDS_FILE="feeds.conf"
+          
+          if [ -f "$FEEDS_FILE" ]; then
+            # Use src-git instead of src-git-full (faster)
+            sed -i 's|src-git-full|src-git|g' "$FEEDS_FILE"
+          fi
 
-          update_feeds_robust() {
+          update_feeds() {
             local attempt=1
             while [ $attempt -le 3 ]; do
-              echo "Attempt $attempt..."
-              if [ $attempt -eq 2 ]; then
-                sed -i 's|https://git.openwrt.org/|https://github.com/openwrt/|g' feeds.conf.default
+              echo "Feeds update attempt $attempt..."
+              
+              if [ $attempt -eq 2 ] && [ -f "$FEEDS_FILE" ]; then
+                echo "Switching to GitHub mirrors..."
+                # Correct GitHub mirror URLs:
+                # 1. Main repo: git.openwrt.org/openwrt/openwrt.git → github.com/openwrt/openwrt.git
+                sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' "$FEEDS_FILE"
+                # 2. Feeds: git.openwrt.org/feed/xxx.git → github.com/openwrt/xxx.git
+                sed -i 's|https://git.openwrt.org/feed/\([^/]*\)\.git|https://github.com/openwrt/\1.git|g' "$FEEDS_FILE"
+                # 3. Projects: git.openwrt.org/project/xxx.git → github.com/openwrt/xxx.git
+                sed -i 's|https://git.openwrt.org/project/\([^/]*\)\.git|https://github.com/openwrt/\1.git|g' "$FEEDS_FILE"
               fi
+              
               if ./scripts/feeds update base packages; then return 0; fi
-              sleep $((attempt * 10)); attempt=$((attempt + 1))
+              sleep 5; attempt=$((attempt + 1))
             done
             return 1
           }
 
-          update_feeds_robust || exit 1
+          update_feeds || exit 1
+          
           ./scripts/feeds install xtables-addons
-
+          
           git clone --depth 1 https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
-          mkdir -p ./package/feeds/packages/xtables-wgobfs
+          mkdir -p package/feeds/packages/xtables-wgobfs
           cp ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
+          
           make defconfig
 
       - name: Build xt_wgobfs packages
