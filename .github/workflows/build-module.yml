@@ -147,9 +147,11 @@ jobs:
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           mkdir -p wgobfsrelease
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
-            ext="${file##*.}"
-            base=$(basename "$file" ".$ext")
-            cp "$file" "wgobfsrelease/${base}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.target }}_${{ matrix.build_env.subtarget }}_${{ matrix.build_env.pkgarch }}.${ext}"
+            filename=$(basename "$file")
+            ext="${filename##*.}"
+            # Extract package name (iptables-mod-wgobfs or kmod-ipt-wgobfs)
+            pkgname=$(echo "$filename" | sed 's/-[0-9].*$//' | sed 's/_.*$//')
+            cp "$file" "wgobfsrelease/${pkgname}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch }}_${{ matrix.build_env.target }}_${{ matrix.build_env.subtarget }}.${ext}"
           done
 
       - name: Release
