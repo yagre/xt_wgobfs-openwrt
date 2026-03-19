@@ -62,8 +62,8 @@ jobs:
         run: |
           ORIGINAL_TAG="${{ steps.get_release.outputs.original_tag }}"
           
-          # Формируем тело сообщения
-          BODY_TEXT=$(cat <<'EOF'
+          # Формируем тело сообщения с ASCII-артом
+          read -r -d '' BODY_TEXT <<'EOF' || true
 ```
   _______                     ________        __
  |       |.-----.-----.-----.|  |  |  |.----.|  |_
@@ -75,7 +75,6 @@ OpenWrt TAG_PLACEHOLDER
 -----------------------------------------------------
 ```
 EOF
-          )
           BODY_TEXT="${BODY_TEXT/TAG_PLACEHOLDER/$ORIGINAL_TAG}"
           
           # Используем jq для безопасного формирования JSON
@@ -95,4 +94,4 @@ EOF
     if: needs.sync-releases.outputs.release_exists == 'false'
     uses: ./.github/workflows/build-module.yml
     with:
-      tag_name: ${{ needs.sync-releases.outputs.release_tag }}
+      tag_name: ${{ needs.sync-releases.outputs.original_tag }}
