@@ -20,7 +20,8 @@ const MIRRORS = [
   'https://archive.openwrt.org'
 ];
 
-let baseUrl = MIRRORS[0];
+let baseUrl = '';
+let releasesUrl = '';
 
 async function fetchHTML(url, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -57,6 +58,7 @@ async function getTargets() {
     const items = await getItems(url);
     if (items.length > 0) {
       baseUrl = mirror;
+      releasesUrl = `/releases/${version}/targets/`;
       return items;
     }
   }
@@ -64,7 +66,7 @@ async function getTargets() {
 }
 
 async function getDetails(target, subtarget) {
-  const packagesUrl = `${baseUrl}${target}/${subtarget}/packages/`;
+  const packagesUrl = `${baseUrl}${releasesUrl}${target}/${subtarget}/packages/`;
   const $ = await fetchHTML(packagesUrl);
   if (!$) return { vermagic: '', pkgarch: '' };
 
@@ -98,7 +100,7 @@ async function main() {
     for (const target of targets) {
       if (filterTargets.length > 0 && !filterTargets.includes(target)) continue;
 
-      const subtargets = await getItems(`${baseUrl}${target}/`);
+      const subtargets = await getItems(`${baseUrl}${releasesUrl}${target}/`);
 
       for (const subtarget of subtargets) {
         if (filterSubtargets.length > 0 && !filterSubtargets.includes(subtarget)) continue;
