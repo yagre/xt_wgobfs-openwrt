@@ -41,9 +41,10 @@ async function getItems(url) {
   const $ = await fetchHTML(url);
   if (!$) return [];
   const items = [];
-  $('table tr td.n a, a').each((_, el) => {
+  $('table tr td.n a').each((_, el) => {
     const name = $(el).attr('href');
-    if (name && name.endsWith('/') && name !== '../') {
+    // Filter: must end with /, not be ../ or parent directory links
+    if (name && name.endsWith('/') && !name.startsWith('/') && name !== '../') {
       items.push(name.slice(0, -1));
     }
   });
