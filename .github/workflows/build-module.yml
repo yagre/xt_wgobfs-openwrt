@@ -41,15 +41,16 @@ jobs:
       - name: Get OpenWRT version from tag
         id: get_version
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -z "${{ inputs.tag_name }}" ]; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
             echo "TARGETS=${{ inputs.targets }}" >> $GITHUB_ENV
             echo "SUBTARGETS=${{ inputs.subtargets }}" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" == "workflow_call" ] || [ -n "${{ inputs.tag_name }}" ]; then
+          elif [ "${{ github.event_name }}" == "workflow_call" ]; then
             VERSION="${{ inputs.tag_name }}"
             echo "VERSION=${VERSION#v}" >> $GITHUB_ENV
           else
-            echo "VERSION=${GITHUB_REF/refs\/tags\/v/}" >> $GITHUB_ENV
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "VERSION=${TAG#v}" >> $GITHUB_ENV
           fi
 
       - name: Install dependencies
@@ -141,44 +142,36 @@ jobs:
 
       - name: Setup SDK and feeds
         run: |
-          # Find SDK directory
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          
+          REPO_DIR=$(pwd)
+
           if [ -z "$SDK_DIR" ]; then
             echo "SDK directory not found"
             exit 1
           fi
-          
+
           cd "$SDK_DIR"
-          # Replace src-git-full with src-git to simplify base feeds update
           sed -i 's|src-git-full|src-git|g' feeds.conf.default
 
-          # Function to update feeds with multiple fallbacks
           update_feeds_robust() {
             local attempt=1
             local max_attempts=3
-            
+
             while [ $attempt -le $max_attempts ]; do
               echo "Feeds update attempt $attempt of $max_attempts..."
-              
-              # Replace URLs in feeds.conf.default based on attempt
+
               if [ $attempt -eq 1 ]; then
                 echo "Trying original feeds source..."
               elif [ $attempt -eq 2 ]; then
                 echo "Replacing OpenWRT git URLs with GitHub mirrors..."
-                # Backup original file
-                cat feeds.conf.default
                 cp feeds.conf.default feeds.conf.default.backup
-                # Replace both URLs
                 sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
                 sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
-                echo "Updated feeds.conf.default:"
-                cat feeds.conf.default
               fi
-              
+
               if ./scripts/feeds update base packages; then
                 echo "Feeds updated successfully on attempt $attempt"
                 return 0
@@ -192,53 +185,42 @@ jobs:
                 attempt=$((attempt + 1))
               fi
             done
-            
+
             echo "All feeds update attempts failed"
             return 1
           }
-          
-          # Update feeds with retry and mirror fallback
+
           if ! update_feeds_robust; then
             echo "Failed to update feeds after all attempts"
             exit 1
           fi
 
           ./scripts/feeds install xtables-addons
+
+          mkdir -p package/xt_wgobfs
+          git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
           
-          # Prepare wgobfs
-          if [ -d package/xt_wgobfs/.git ]; then
-            git -C package/xt_wgobfs fetch --all && git -C package/xt_wgobfs reset --hard origin/HEAD
-          else
-            rm -rf package/xt_wgobfs
-            git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
-          fi
           mkdir -p ./package/feeds/packages/xtables-wgobfs
-          mv ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs
-          
+          cp ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
+
           make defconfig
 
       - name: Build xt_wgobfs packages
         run: |
-          # Find SDK directory
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          cd "$SDK_DIR"
 
           echo "Building xt_wgobfs packages..."
-          make package/xtables-wgobfs/compile -j$(nproc) V=s  2>&1 | tail -n 30
-
-          #find . -name *wg*.ipk   # find . -name "*wg*.ipk" -exec cp {} /tmp \;
+          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(nproc) V=s  2>&1 | tail -n 30
 
           echo "Build completed. Checking for built packages..."
-          find bin/ -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | head -n 10
+          find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | head -n 10
 
       - name: Prepare artifacts
         run: |
-          # Find SDK directory
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
 
           mkdir -p wgobfsrelease
 
-          # Copy built packages (both .ipk and .apk)
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
             filename=$(basename "$file")
             ext="${filename##*.}"
