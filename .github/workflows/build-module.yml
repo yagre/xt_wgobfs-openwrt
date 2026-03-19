@@ -24,6 +24,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   generate-config:
     runs-on: ubuntu-latest
@@ -92,147 +95,77 @@ jobs:
       - name: Download and extract OpenWrt SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          echo "pkgarch: ${{ matrix.build_env.pkgarch}}, target:${{ matrix.build_env.target}}, subtarget: ${{ matrix.build_env.subtarget}}"
-
-          # Try mirror first, then fallback to main site, or archive for older versions
           MIRRORS=(
             "https://mirror-03.infra.openwrt.org"
             "https://downloads.openwrt.org"
-            "https://archive.openwrt.org/"
+            "https://archive.openwrt.org"
           )
           
           for MIRROR in "${MIRRORS[@]}"; do
             echo "Trying mirror: $MIRROR"
+            URL="$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
+            SDK_FILE=$(curl -s "$URL" | grep -o "openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
             
-            SDK_FILE=$(curl -s "$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/" | grep -o "openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
-            echo "Searching for SDK file at $MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
-            echo "Searching for SDK file as pattern: openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-*_musl_*.Linux-x86_64.tar.[xz|zst]"
             if [ -n "$SDK_FILE" ]; then
-              SDK_DOWNLOAD_URL="$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/${SDK_FILE}"
-              echo "Found SDK at: $SDK_DOWNLOAD_URL"
-              
+              SDK_DOWNLOAD_URL="${URL}${SDK_FILE}"
+              echo "Downloading SDK: $SDK_DOWNLOAD_URL"
               if wget -q "$SDK_DOWNLOAD_URL"; then
-                echo "Successfully downloaded from $MIRROR"
-                
-                # Extract based on file extension
-                if [[ "$SDK_FILE" == *.tar.zst ]]; then
-                  tar --zstd -xf "$SDK_FILE"
-                elif [[ "$SDK_FILE" == *.tar.xz ]]; then
-                  tar -xf "$SDK_FILE"
-                else
-                  echo "Unknown archive format: $SDK_FILE"
-                  exit 1
-                fi
-                
+                if [[ "$SDK_FILE" == *.tar.zst ]]; then tar --zstd -xf "$SDK_FILE"; else tar -xf "$SDK_FILE"; fi
                 rm "$SDK_FILE"
                 break
-              else
-                echo "Download failed from $MIRROR, trying next mirror..."
-                continue
               fi
-            else
-              echo "No SDK file found at $MIRROR"
             fi
           done
           
-          if [ -z "$SDK_FILE" ] || [ ! -d "openwrt-sdk-"* ]; then
-            echo "Failed to download SDK from all mirrors"
-            exit 1
-          fi
+          if [ ! -d "openwrt-sdk-"* ]; then echo "SDK download failed"; exit 1; fi
 
       - name: Setup SDK and feeds
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          REPO_DIR=$(pwd)
-
-          if [ -z "$SDK_DIR" ]; then
-            echo "SDK directory not found"
-            exit 1
-          fi
-
           cd "$SDK_DIR"
           sed -i 's|src-git-full|src-git|g' feeds.conf.default
 
           update_feeds_robust() {
             local attempt=1
-            local max_attempts=3
-
-            while [ $attempt -le $max_attempts ]; do
-              echo "Feeds update attempt $attempt of $max_attempts..."
-
-              if [ $attempt -eq 1 ]; then
-                echo "Trying original feeds source..."
-              elif [ $attempt -eq 2 ]; then
-                echo "Replacing OpenWRT git URLs with GitHub mirrors..."
-                cp feeds.conf.default feeds.conf.default.backup
-                sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/feed/packages.git|https://github.com/openwrt/packages.git|g' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/project/luci.git|https://github.com/openwrt/luci.git|g' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
-                sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
+            while [ $attempt -le 3 ]; do
+              echo "Attempt $attempt..."
+              if [ $attempt -eq 2 ]; then
+                sed -i 's|https://git.openwrt.org/|https://github.com/openwrt/|g' feeds.conf.default
               fi
-
-              if ./scripts/feeds update base packages; then
-                echo "Feeds updated successfully on attempt $attempt"
-                return 0
-              else
-                echo "Feeds update attempt $attempt failed"
-                if [ $attempt -lt $max_attempts ]; then
-                  local wait_time=$((attempt * 15))
-                  echo "Waiting $wait_time seconds before next attempt..."
-                  sleep $wait_time
-                fi
-                attempt=$((attempt + 1))
-              fi
+              if ./scripts/feeds update base packages; then return 0; fi
+              sleep $((attempt * 10)); attempt=$((attempt + 1))
             done
-
-            echo "All feeds update attempts failed"
             return 1
           }
 
-          if ! update_feeds_robust; then
-            echo "Failed to update feeds after all attempts"
-            exit 1
-          fi
-
+          update_feeds_robust || exit 1
           ./scripts/feeds install xtables-addons
-
-          mkdir -p package/xt_wgobfs
-          git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
           
+          git clone https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
           mkdir -p ./package/feeds/packages/xtables-wgobfs
           cp ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
-
           make defconfig
 
       - name: Build xt_wgobfs packages
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-
-          echo "Building xt_wgobfs packages..."
-          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(nproc) V=s  2>&1 | tail -n 30
-
-          echo "Build completed. Checking for built packages..."
-          find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | head -n 10
+          make -C "$SDK_DIR" package/xtables-wgobfs/compile -j$(nproc) V=s
+          find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
         run: |
           SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-
           mkdir -p wgobfsrelease
-
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \) | while read -r file; do
-            filename=$(basename "$file")
-            ext="${filename##*.}"
-            base="${filename%.*}"
+            ext="${file##*.}"
+            base=$(basename "$file" ".$ext")
             cp "$file" "wgobfsrelease/${base}_v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch}}.${ext}"
           done
-
-          echo "Packages prepared for release:"
-          ls -la wgobfsrelease/
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: wgobfsrelease/*
           tag_name: v${{ matrix.build_env.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
