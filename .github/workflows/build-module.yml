@@ -83,29 +83,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-pyelftools
 
-      - name: Cache OpenWrt SDK
-        id: cache-sdk
-        uses: actions/cache@v4
-        env:
-          cache-name: "cache-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}"
-        with:
-          path: openwrt-sdk-*/
-          key: ${{ runner.os }}-sdk-${{ env.cache-name }}
-
       - name: Download and extract OpenWrt SDK
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           MIRRORS=(
             "https://mirror-03.infra.openwrt.org"
             "https://downloads.openwrt.org"
             "https://archive.openwrt.org"
           )
-          
+
           for MIRROR in "${MIRRORS[@]}"; do
             echo "Trying mirror: $MIRROR"
             URL="$MIRROR/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
             SDK_FILE=$(curl -s "$URL" | grep -o "openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
-            
+
             if [ -n "$SDK_FILE" ]; then
               SDK_DOWNLOAD_URL="${URL}${SDK_FILE}"
               echo "Downloading SDK: $SDK_DOWNLOAD_URL"
@@ -116,7 +106,7 @@ jobs:
               fi
             fi
           done
-          
+
           if [ ! -d "openwrt-sdk-"* ]; then echo "SDK download failed"; exit 1; fi
 
       - name: Setup SDK and feeds
