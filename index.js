@@ -165,6 +165,25 @@ const targetSubtargetToPkgArch = {
 
 async function getDetails(target, subtarget) {
   const packagesUrl = `${baseUrl}${releasesUrl}${target}/${subtarget}/packages/`;
+  
+  // Try to fetch index.json first (newer OpenWRT versions)
+  try {
+    const { data } = await axios.get(`${packagesUrl}index.json`, { timeout: 10000 });
+    const kernel = data.packages?.kernel;
+    if (kernel) {
+      // Extract vermagic from version: "6.12.71~abc123-r1" → "abc123"
+      const versionMatch = kernel.version.match(/~([a-f0-9]+)-r\d+$/);
+      const vermagic = versionMatch ? versionMatch[1] : '';
+      const pkgarch = kernel.architecture || kernel.pkgarch || '';
+      if (vermagic && pkgarch) {
+        return { vermagic, pkgarch };
+      }
+    }
+  } catch (error) {
+    // index.json not found, fall back to HTML parsing
+  }
+
+  // Fallback: parse HTML directory listing
   const $ = await fetchHTML(packagesUrl);
   if (!$) return { vermagic: '', pkgarch: '' };
 
