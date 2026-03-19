@@ -65,6 +65,51 @@ async function getTargets() {
   return [];
 }
 
+// Mapping of target names to pkgarch for new OpenWRT format (25.12.0+)
+const targetToPkgArch = {
+  'apm821xx': 'ppc44x',
+  'armsr': 'arm',
+  'at91': 'arm',
+  'ath79': 'mips',
+  'bcm27xx': 'aarch72',
+  'bcm47xx': 'mips',
+  'bcm4908': 'aarch72',
+  'bcm53xx': 'arm',
+  'bmips': 'mips',
+  'd1': 'riscv',
+  'gemini': 'arm',
+  'imx': 'aarch72',
+  'ipq40xx': 'aarch72',
+  'ipq806x': 'aarch72',
+  'ixp4xx': 'arm',
+  'kirkwood': 'arm',
+  'lantiq': 'mips',
+  'layerscape': 'aarch72',
+  'loongarch64': 'loongarch',
+  'malta': 'mips',
+  'mediatek': 'aarch72',
+  'microchipsw': 'riscv',
+  'mpc85xx': 'ppce500',
+  'mvebu': 'aarch72',
+  'mxs': 'arm',
+  'octeon': 'mips64',
+  'omap': 'arm',
+  'pistachio': 'mips',
+  'qoriq': 'ppce500',
+  'qualcommax': 'aarch72',
+  'ramips': 'mips',
+  'realtek': 'arm',
+  'rockchip': 'aarch72',
+  'sifiveu': 'riscv',
+  'siflower': 'mips',
+  'starfive': 'riscv',
+  'stm32': 'aarch72',
+  'sunxi': 'arm',
+  'tegra': 'aarch72',
+  'x86': 'x86_64',
+  'zynq': 'arm'
+};
+
 async function getDetails(target, subtarget) {
   const packagesUrl = `${baseUrl}${releasesUrl}${target}/${subtarget}/packages/`;
   const $ = await fetchHTML(packagesUrl);
@@ -75,15 +120,26 @@ async function getDetails(target, subtarget) {
 
   $('a').each((_, el) => {
     const name = $(el).attr('href');
-    if (name && name.startsWith('kernel_')) {
-      // Улучшенное регулярное выражение: поддерживает .ipk и .apk
-      const match = name.match(/kernel_.*[-~]([a-f0-9]+)_([a-zA-Z0-9_-]+)\.(?:ipk|apk)$/);
-      if (match) {
-        vermagic = match[1];
-        pkgarch = match[2];
+    if (name && name.startsWith('kernel')) {
+      // New format: kernel-6.12.71~364f8debbcd4cddc1f038dea515bf8a5-r1.apk
+      const matchNew = name.match(/kernel-[\d.]+~([a-f0-9]+)-r\d+\.(?:ipk|apk)$/);
+      // Old format: kernel_5.15.160-1~abcdef123_mips_24kc.ipk
+      const matchOld = name.match(/kernel_[\d.]+[-~]([a-f0-9]+)[-_]([a-zA-Z0-9_-]+)\.(?:ipk|apk)$/);
+      
+      if (matchNew) {
+        vermagic = matchNew[1];
+      } else if (matchOld) {
+        vermagic = matchOld[1];
+        pkgarch = matchOld[2];
       }
     }
   });
+
+  // If pkgarch not found in filename (new format), derive from target
+  if (!pkgarch) {
+    pkgarch = targetToPkgArch[target] || target;
+  }
+
   return { vermagic, pkgarch };
 }
 
