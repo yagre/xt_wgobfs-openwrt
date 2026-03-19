@@ -124,54 +124,36 @@ jobs:
 
       - name: Setup SDK and feeds
         run: |
-          SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*" | head -n1)
-          if [ -z "$SDK_DIR" ]; then
-            SDK_DIR=$(find . -maxdepth 1 -type l -name "openwrt-sdk-*" | head -n1)
-          fi
+          SDK_DIR=$(find . -maxdepth 1 \( -type d -o -type l \) -name "openwrt-sdk-*" | head -n1)
           if [ -z "$SDK_DIR" ]; then
             echo "SDK directory not found"
             exit 1
           fi
           cd "$SDK_DIR"
           
-          FEEDS_FILE="feeds.conf.default"
-          [ ! -f "$FEEDS_FILE" ] && FEEDS_FILE="feeds.conf"
+          # Clean old traces
+          rm -rf package/xt_wgobfs
           
-          if [ -f "$FEEDS_FILE" ]; then
-            # Use src-git instead of src-git-full (faster)
-            sed -i 's|src-git-full|src-git|g' "$FEEDS_FILE"
-          fi
-
-          update_feeds() {
-            local attempt=1
-            while [ $attempt -le 3 ]; do
-              echo "Feeds update attempt $attempt..."
-              
-              if [ $attempt -eq 2 ] && [ -f "$FEEDS_FILE" ]; then
-                echo "Switching to GitHub mirrors..."
-                # Correct GitHub mirror URLs:
-                # 1. Main repo: git.openwrt.org/openwrt/openwrt.git → github.com/openwrt/openwrt.git
-                sed -i 's|https://git.openwrt.org/openwrt/openwrt.git|https://github.com/openwrt/openwrt.git|g' "$FEEDS_FILE"
-                # 2. Feeds: git.openwrt.org/feed/xxx.git → github.com/openwrt/xxx.git
-                sed -i 's|https://git.openwrt.org/feed/\([^/]*\)\.git|https://github.com/openwrt/\1.git|g' "$FEEDS_FILE"
-                # 3. Projects: git.openwrt.org/project/xxx.git → github.com/openwrt/xxx.git
-                sed -i 's|https://git.openwrt.org/project/\([^/]*\)\.git|https://github.com/openwrt/\1.git|g' "$FEEDS_FILE"
-              fi
-              
-              if ./scripts/feeds update base packages; then return 0; fi
-              sleep 5; attempt=$((attempt + 1))
-            done
-            return 1
-          }
-
-          update_feeds || exit 1
+          # 1. Update feeds (base needed for kernel headers)
+          ./scripts/feeds update -q base
+          ./scripts/feeds install -q kmod-ipt-core libxtables
           
-          ./scripts/feeds install xtables-addons
+          # 2. Clone sources to temp folder OUTSIDE SDK
+          git clone --depth 1 https://github.com/infinet/xt_wgobfs.git /tmp/xt_wgobfs
           
-          git clone --depth 1 https://github.com/infinet/xt_wgobfs.git package/xt_wgobfs
-          mkdir -p package/feeds/packages/xtables-wgobfs
-          cp ./package/xt_wgobfs/openwrt/package/Makefile ./package/feeds/packages/xtables-wgobfs/
+          # 3. Create ONE clean package folder
+          mkdir -p package/xt_wgobfs
           
+          # Copy Makefile
+          cp /tmp/xt_wgobfs/openwrt/package/Makefile package/xt_wgobfs/Makefile
+          
+          # Remove recursive dependency (fixes "recursive dependency" error)
+          sed -i 's/+kmod-ipt-wgobfs//g' package/xt_wgobfs/Makefile
+          
+          # 4. Copy src folder inside so Makefile can find it
+          cp -r /tmp/xt_wgobfs/src package/xt_wgobfs/
+          
+          # Generate config
           make defconfig
 
       - name: Build xt_wgobfs packages
@@ -181,8 +163,8 @@ jobs:
             echo "SDK directory not found"
             exit 1
           fi
-          # Build only the package, skip toolchain/tools rebuild
-          make -C "$SDK_DIR" package/feeds/packages/xtables-wgobfs/compile -j$(($(nproc) + 1))
+          # Build only our package
+          make -C "$SDK_DIR" package/xt_wgobfs/compile -j$(($(nproc) + 1))
           find "$SDK_DIR/bin" -type f \( -name "*wgobfs*.ipk" -o -name "*wgobfs*.apk" \)
 
       - name: Prepare artifacts
