@@ -154,11 +154,11 @@ jobs:
 
           # FIX 2: Insert Build/Configure BEFORE BuildPackage call
           sed -i '/include ..package.mk/a \
-\
-define Build/Configure\
-    (cd $(PKG_BUILD_DIR); autoreconf -fi || true);\
-    $(call Build/Configure/Default)\
-endef' package/xt_wgobfs/Makefile
+          \
+          define Build/Configure\
+              (cd $(PKG_BUILD_DIR); autoreconf -fi || true);\
+              $(call Build/Configure/Default)\
+          endef' package/xt_wgobfs/Makefile
 
           make defconfig
 
