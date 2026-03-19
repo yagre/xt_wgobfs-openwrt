@@ -100,14 +100,27 @@ jobs:
               SDK_DOWNLOAD_URL="${URL}${SDK_FILE}"
               echo "Downloading SDK: $SDK_DOWNLOAD_URL"
               if wget -q "$SDK_DOWNLOAD_URL"; then
-                if [[ "$SDK_FILE" == *.tar.zst ]]; then tar --zstd -xf "$SDK_FILE"; else tar -xf "$SDK_FILE"; fi
+                # Extract to /dev/shm (RAM) for faster I/O
+                if [[ "$SDK_FILE" == *.tar.zst ]]; then
+                  tar --zstd -xf "$SDK_FILE" -C /dev/shm/
+                else
+                  tar -xf "$SDK_FILE" -C /dev/shm/
+                fi
                 rm "$SDK_FILE"
+
+                # Create symlink in workspace
+                SDK_DIR_NAME=$(find /dev/shm -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1 | xargs basename)
+                ln -s /dev/shm/$SDK_DIR_NAME ./$SDK_DIR_NAME
+                echo "SDK extracted to /dev/shm/$SDK_DIR_NAME"
                 break
               fi
             fi
           done
 
-          if [ ! -d "openwrt-sdk-"* ]; then echo "SDK download failed"; exit 1; fi
+          if [ ! -d "openwrt-sdk-"* ]; then
+            echo "SDK download failed"
+            exit 1
+          fi
 
       - name: Setup SDK and feeds
         run: |
