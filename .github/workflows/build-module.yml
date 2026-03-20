@@ -216,9 +216,6 @@ jobs:
             -----------------------------------------------------
             OpenWrt v${{ matrix.build_env.tag }}
             -----------------------------------------------------
-
-            Target: ${{ matrix.build_env.target }}/${{ matrix.build_env.subtarget }}
-            Architecture: ${{ matrix.build_env.pkgarch }}
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
